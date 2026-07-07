@@ -1,0 +1,17 @@
+@if (userResource.isLoading()) {
+    <ngx-skeleton-loader
+      appearance="circle"
+      [theme]="{ width: '64px', height: '64px' }"
+    />
+    <ngx-skeleton-loader count="2" [theme]="{ height: '14px', width: '60%' }" />
+  <div class="user-card">
+  </div>
+} @else if (userResource.error()) {
+  <p>Erro ao carregar usuário</p>
+} @else if (userResource.hasValue()) {
+  <div class="user-card">
+    <h3>{{ user.userName }}</h3>
+    <p>{{ user.email }}</p>
+    <p>{{ user.age }}</p>
+  </div>
+}

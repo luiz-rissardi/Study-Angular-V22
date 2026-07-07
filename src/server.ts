@@ -6,27 +6,85 @@ import {
 } from '@angular/ssr/node';
 import express from 'express';
 import { join } from 'node:path';
+import cors from "cors";
+import { randomUUID } from 'node:crypto';
 
 const browserDistFolder = join(import.meta.dirname, '../browser');
 
 const app = express();
-const angularApp = new AngularNodeAppEngine();
+
+app.use(cors())
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+const angularApp = new AngularNodeAppEngine({
+  allowedHosts: ['localhost', 'localhost:4000', 'your-production-domain.com']
+});;
 
 /**
  * Example Express Rest API endpoints can be defined here.
  * Uncomment and define endpoints as necessary.
- *
- * Example:
- * ```ts
- * app.get('/api/{*splat}', (req, res) => {
- *   // Handle API request
- * });
- * ```
  */
 
-/**
- * Serve static files from /browser
- */
+interface UserModel {
+  userName: string;
+  email: string;
+  age: number | null;
+  userType: string;
+  id: string;
+}
+
+const db = new Map();
+
+app.get("/api/user/:userId", (request, response) => {
+  const { userId } = request.params || null;
+  const user = db.get(userId);
+
+  if (!user) {
+    response.status(400).send("userId is not be null");
+  } else {
+    response.status(200).send(user);
+  }
+  response.end();
+})
+
+app.post("/api/user", (request, response) => {
+  const user: UserModel = request.body;
+  if (!user) {
+    response.send({
+      isSuccess: false,
+      message: "user data not exist"
+    })
+  }
+  user.id = randomUUID();
+  db.set(user.id, user);
+  
+  response.send({
+    userId: user.id,
+    isSuccess: true,
+  });
+  response.end();
+})
+
+app.get('/api/findUser/:name', (req, res) => {
+  const userName = req.params.name;
+  const userAge = 27;
+
+  if (userName === "Luiz") {
+    res.status(200).send({
+      isSuccess: true,
+      userAge
+    })
+  } else {
+    res.status(200).send({
+      message: "idade de usuário inválido"
+    })
+  }
+
+  res.end();
+});
+
+
 app.use(
   express.static(browserDistFolder, {
     maxAge: '1y',

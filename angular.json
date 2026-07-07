@@ -35,7 +35,10 @@
             "server": "src/main.server.ts",
             "outputMode": "server",
             "security": {
-              "allowedHosts": []
+              "allowedHosts": [
+                "localhost:4000",
+                "*"
+              ]
             },
             "ssr": {
               "entry": "src/server.ts"
@@ -48,19 +51,24 @@
                   "type": "initial",
                   "maximumWarning": "500kB",
                   "maximumError": "1MB"
-                },
-                {
-                  "type": "anyComponentStyle",
-                  "maximumWarning": "4kB",
-                  "maximumError": "8kB"
                 }
               ],
-              "outputHashing": "all"
+              "outputHashing": "all",
+              "security": {
+                "allowedHosts": [
+                  "localhost:4000"
+                ]
+              }
             },
             "development": {
               "optimization": false,
               "extractLicenses": false,
-              "sourceMap": true
+              "sourceMap": true,
+              "security": {
+                "allowedHosts": [
+                  "localhost:4000"
+                ]
+              }
             }
           },
           "defaultConfiguration": "production"
