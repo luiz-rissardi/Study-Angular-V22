@@ -69,17 +69,27 @@ export function createRoutes(app: Application) {
     app.post("/auth/refresh", (request, response) => {
         const refreshToken = request.signedCookies.refreshToken;
         if (!refreshToken) {
-            response.status(401).json({ erro: 'Sem refresh token' });
+            response.status(500).json({ erro: 'Sem refresh token' });
             return;
         }
 
         try {
-            const payload = jwt.verify(refreshToken, process.env["REFRESH_SECRET"]!) as { userId: string };;
-            const accessToken = jwt.sign({ userId: payload.userId }, process.env["JWT_SECRET"]!, { expiresIn: '15m' });
-            response.send({ accessToken });
+            // fazer a rotação de refreshToken
+            const payload = jwt.verify(refreshToken, process.env["REFRESH_SECRET"]!) as { userId: string };
+            const newAccessToken = jwt.sign({ userId: payload.userId }, process.env["JWT_SECRET"]!, { expiresIn: '15m' });
+            const newRefreshToken = jwt.sign({ userId: payload.userId }, process.env["REFRESH_SECRET"]!, { expiresIn: '7d' });
+
+            response.cookie("refreshToken", newRefreshToken, {
+                httpOnly: true,
+                signed: true,
+                sameSite: 'strict',
+                maxAge: 7 * 24 * 60 * 60 * 1000,
+                // secure: true // lembre-se de ativar em produção!
+            });
+            response.send({accessToken:newAccessToken});
         } catch (error) {
             response.clearCookie("refreshToken");
-            response.status(401).send({ erro: 'Refresh inválido' })
+            response.status(500).send({ erro: 'Refresh inválido' })
         } finally {
             response.end();
         }

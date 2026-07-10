@@ -13,8 +13,6 @@ export const refreshInterceptor: HttpInterceptorFn = (req, next) => {
     return next(req);
   }
 
-  console.log("teste");
-
   return next(req).pipe(
     catchError((err: HttpErrorResponse) => {
       // se o erro não for 401 (erros de autorização) passa o erro a diante no navegador

@@ -123,6 +123,7 @@ app.post("/api/user", (request, response) => {
     isSuccess: true,
   });
   response.end();
+  return;
 })
 
 app.get('/api/findUser/:name', (req, res) => {
