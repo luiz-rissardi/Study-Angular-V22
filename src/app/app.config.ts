@@ -6,13 +6,15 @@ import { provideClientHydration } from '@angular/platform-browser';
 import { provideHttpClient, withInterceptors } from '@angular/common/http';
 import { provideNgxSkeletonLoader } from 'ngx-skeleton-loader';
 import { delayInterceptor } from './interceptors/delay-interceptor';
+import { authInterceptorInterceptor } from './interceptors/auth-interceptor-interceptor';
+import { refreshInterceptor } from './interceptors/refresh-interceptor';
 
 export const appConfig: ApplicationConfig = {
   providers: [
     provideBrowserGlobalErrorListeners(),
     provideRouter(routes, withComponentInputBinding()),
     provideClientHydration(),
-    provideHttpClient(withInterceptors([delayInterceptor])),
+    provideHttpClient(withInterceptors([delayInterceptor,authInterceptorInterceptor,refreshInterceptor])),
     provideNgxSkeletonLoader({
       theme: {
         extendsFromRoot: true,

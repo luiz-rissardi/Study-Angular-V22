@@ -4,18 +4,73 @@ import {
   isMainModule,
   writeResponseToNodeResponse,
 } from '@angular/ssr/node';
-import express from 'express';
+import express, { NextFunction, Request, Response } from 'express';
 import { join } from 'node:path';
 import cors from "cors";
 import { randomUUID } from 'node:crypto';
+import cookieParser from "cookie-parser";
+import dotenv from "dotenv";
+import { createRoutes } from './routes.server';
+import jwt, { JsonWebTokenError, TokenExpiredError } from "jsonwebtoken";
+
+dotenv.config();
 
 const browserDistFolder = join(import.meta.dirname, '../browser');
 
-const app = express();
+export const app = express();
 
 app.use(cors())
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(cookieParser(process.env['SECRET_COOKIE']));
+
+export interface AuthenticatedRequest extends Request {
+  userId?: string;
+}
+
+export function authenticateHook(request: AuthenticatedRequest, response: Response, next: NextFunction) {
+  try {
+    const authHeader = request.headers.authorization; // "Bearer eyJhbG...
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      response.status(401).send({
+        error: "WITHOUT_TOKEN",
+        message: "Token não fornecido"
+      });
+      return;
+    }
+
+    const token = authHeader.split(" ")[1];
+    const payload: any = jwt.verify(token, process.env["JWT_SECRET"]!);
+    request.userId = payload.userId; // injeta o userId na requisição, disponível pra rota
+    next(); // só chama next() quando autenticação é válida
+  } catch (error: unknown) {
+    switch (true) {
+
+      case error instanceof TokenExpiredError:
+        response.status(401).send({
+          error: "TOKEN_EXPIRED",
+          message: "Token expirado"
+        });
+        break;
+
+      case error instanceof JsonWebTokenError:
+        response.status(401).send({
+          error: "TOKEN_INVALID",
+          message: "Token inválido"
+        });
+        break;
+
+      default:
+        response.status(500).send({
+          error: "AUTH_INTERNAL_ERROR",
+          message: "Erro ao autenticar"
+        });
+        break;
+
+    }
+  }
+}
+
 
 const angularApp = new AngularNodeAppEngine({
   allowedHosts: ['localhost', 'localhost:4000', 'your-production-domain.com']
@@ -26,19 +81,23 @@ const angularApp = new AngularNodeAppEngine({
  * Uncomment and define endpoints as necessary.
  */
 
-interface UserModel {
+export interface UserModel {
   userName: string;
   email: string;
   age: number | null;
   userType: string;
   id: string;
+  password: string;
 }
 
-const db = new Map();
+export const db = new Map();
 
-app.get("/api/user/:userId", (request, response) => {
-  const { userId } = request.params || null;
-  const user = db.get(userId);
+createRoutes(app);
+
+app.get("/api/user", authenticateHook, (request: AuthenticatedRequest, response) => {
+
+  const userId = request["userId"] || null;
+  const user: UserModel = db.get(userId);
 
   if (!user) {
     response.status(400).send("userId is not be null");
@@ -58,7 +117,7 @@ app.post("/api/user", (request, response) => {
   }
   user.id = randomUUID();
   db.set(user.id, user);
-  
+
   response.send({
     userId: user.id,
     isSuccess: true,

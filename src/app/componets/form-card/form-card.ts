@@ -97,7 +97,7 @@ export class FormCard {
 
       const data: any = await firstValueFrom(this.userService.createUser(formData));
       if (data?.isSuccess) {
-        this.routerService.navigate(["/home", data?.userId]);
+        this.routerService.navigate(["/auth/login"]);
       }
     })
   }

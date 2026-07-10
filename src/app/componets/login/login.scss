@@ -1,0 +1,133 @@
+// --- Variáveis Globais de Estilo ---
+$primary-color: #007bff;
+$primary-hover: #0056b3;
+$error-color: #dc3545;
+$font-sans: sans-serif;
+
+/* Container principal do card */
+.card-3d {
+    background-color: #ffffff;
+    max-width: 400px;
+    margin: 50px auto;
+    padding: 40px;
+    border-radius: 20px;
+
+    /* O segredo do efeito 3D está aqui */
+    box-shadow:
+        0 20px 40px rgba(0, 0, 0, 0.15),
+        /* Sombra difusa (profundidade) */
+        0 5px 10px rgba(0, 0, 0, 0.08),
+        /* Sombra próxima (contato) */
+        inset 0 2px 0 rgba(255, 255, 255, 0.9),
+        /* Brilho interno no topo (luz) */
+        inset 0 -2px 0 rgba(0, 0, 0, 0.03);
+    /* Escurecimento sutil na base */
+
+    h2 {
+        margin-top: 0;
+        color: #333;
+        font-family: $font-sans;
+        text-align: center;
+        margin-bottom: 24px;
+    }
+}
+
+/* Campos de entrada do Formulário */
+.input-group {
+    margin-bottom: 20px;
+    display: flex;
+    flex-direction: column;
+    font-family: $font-sans;
+    position: relative; // Garante o alinhamento de elementos filhos se necessário
+    border: none;
+
+    label {
+        margin-bottom: 8px;
+        color: #555;
+        font-weight: bold;
+        font-size: 14px;
+    }
+
+    input,
+    select {
+        padding: 12px;
+        border: 1px solid #ddd;
+        border-radius: 8px;
+        background-color: #f9f9f9;
+        font-size: 16px;
+        transition: border-color 0.3s, box-shadow 0.3s;
+
+        &:focus {
+            outline: none;
+            border-color: $primary-color;
+            background-color: #fff;
+        }
+
+        // Estilização do input quando houver erro de validação (Signal Forms)
+        &.ng-touched.ng-invalid,
+        &.is-invalid {
+            border-color: $error-color;
+            background-color: #fff;
+
+            &:focus {
+                box-shadow: 0 0 0 0.2rem rgba($error-color, 0.25);
+            }
+        }
+    }
+
+    /* Mensagem de erro oculta por padrão */
+    .error-message {
+        display: none;
+        color: $error-color;
+        font-size: 13px;
+        margin-top: 6px;
+        font-weight: 500;
+    }
+
+    /* Exibe a mensagem de erro se o input irmão anterior estiver inválido e tocado */
+    input.ng-touched.ng-invalid~.error-message,
+    input.is-invalid~.error-message {
+        display: block;
+    }
+}
+
+/* Botão de Envio */
+.btn-submit {
+    width: 100%;
+    padding: 14px;
+    background-color: $primary-color;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 16px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: background-color 0.3s, transform 0.1s;
+
+    &:hover {
+        background-color: $primary-hover;
+    }
+
+    &:active {
+        transform: scale(0.98);
+        /* Clique 3D no botão */
+    }
+}
+
+.input-invalid {
+    color: #dc3545;
+    font-weight: 500;
+}
+
+.error-credentials{
+    width: 300px;
+    height: 50px;
+    font-size: 1rem;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background-color: #9b4851;
+    border-color: red;
+    color: rgb(78, 0, 0);
+    border-radius: 12px;
+}
