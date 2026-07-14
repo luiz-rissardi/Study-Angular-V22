@@ -26,6 +26,7 @@
     "express": "^5.1.0",
     "jsonwebtoken": "^9.0.3",
     "ngx-skeleton-loader": "^13.0.0",
+    "redis": "^6.1.0",
     "rxjs": "~7.8.0",
     "tslib": "^2.3.0"
   },

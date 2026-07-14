@@ -1,0 +1,72 @@
+$primary-color: #007bff;
+$primary-hover: #0056b3;
+$error-color: #dc3545;
+$font-sans: sans-serif;
+
+.payment {
+    &-card {
+        width: 30%;
+        height: 70vh;
+        margin: auto;
+        margin-top: 5%;
+        border-radius: 16px;
+        display: flex;
+        flex-direction: column;
+        padding: 20px;
+        color: rgba(0, 0, 0, 0.822);
+        background-color: aliceblue;
+        box-shadow:
+            0 20px 40px rgba(0, 0, 0, 0.15),
+            /* Sombra difusa (profundidade) */
+            0 5px 10px rgba(0, 0, 0, 0.08),
+            /* Sombra próxima (contato) */
+            inset 0 2px 0 rgba(255, 255, 255, 0.9),
+            /* Brilho interno no topo (luz) */
+            inset 0 -2px 0 rgba(0, 0, 0, 0.03);
+    }
+
+    &-form{
+        display: flex;
+        height: 70%;
+        flex-direction: column;
+        justify-content: space-between;
+    }
+
+    &-fieldset {
+        border: none;
+        justify-content: space-around;
+        label {
+            margin-bottom: 8px;
+            color: #555;
+            font-weight: bold;
+            font-size: 14px;
+        }
+
+        input,
+        select {
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background-color: #f9f9f9;
+            font-size: 16px;
+            transition: border-color 0.3s, box-shadow 0.3s;
+
+            &:focus {
+                outline: none;
+                border-color: $primary-color;
+                background-color: #fff;
+            }
+
+            // Estilização do input quando houver erro de validação (Signal Forms)
+            &.ng-touched.ng-invalid,
+            &.is-invalid {
+                border-color: $error-color;
+                background-color: #fff;
+
+                &:focus {
+                    box-shadow: 0 0 0 0.2rem rgba($error-color, 0.25);
+                }
+            }
+        }
+    }
+}

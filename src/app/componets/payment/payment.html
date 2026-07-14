@@ -1,0 +1,29 @@
+<section class="payment-card">
+    <h2> Payment section </h2>
+
+    <form class="payment-form" (submit)="this.onSubmit($event)">
+        <fieldset class="payment-fieldset">
+            <label for="credit-card">credit card:</label>
+            <input type="number" [formField]="paymentForm.creditCardNumber" id="credit-card"
+                placeholder="number of cretid card">
+        </fieldset>
+
+        <fieldset class="payment-fieldset">
+            <label for="account-id">account id:</label>
+            <input type="number" [formField]="paymentForm.accountId" id="account-id" placeholder="id of account">
+        </fieldset>
+
+        <fieldset class="payment-fieldset">
+            <label for="value-payment">value:</label>
+            <input type="number" [formField]="paymentForm.value" id="value-payment" placeholder="value of payment">
+        </fieldset>
+
+        <button type="submit" [disabled]="!paymentForm().valid() || paymentForm().submitting()">
+            @if(!paymentForm().submitting()){
+            realizar pagamento
+            }@else {
+            realizando pagamento...
+            }
+        </button>
+    </form>
+</section>

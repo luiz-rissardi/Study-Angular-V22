@@ -1,8 +1,23 @@
 import { Application } from "express";
-import { AuthenticatedRequest, authenticateHook, db, UserModel } from "./server";
+import { AuthenticatedRequest, authenticateHook, db, idempotencyKeyHook, UserModel } from "./server";
 import jwt from "jsonwebtoken";
+import { PaymentData } from "./app/componets/payment/payment";
+
+const data:any = [];
 
 export function createRoutes(app: Application) {
+
+    app.post("/payment",authenticateHook, idempotencyKeyHook, async (request, response) => {
+        const paymentData: PaymentData = request.body;
+        await new Promise(resolve => setTimeout(resolve, 5000));
+
+        data.push(paymentData)
+        console.log(data);
+
+        response.send({ success: true, message: "operação feita com sucesso!" })
+
+    })
+
     app.post("/auth/login", (request, response) => {
         try {
             const { userName, password } = request.body as UserModel;
@@ -86,7 +101,7 @@ export function createRoutes(app: Application) {
                 maxAge: 7 * 24 * 60 * 60 * 1000,
                 // secure: true // lembre-se de ativar em produção!
             });
-            response.send({accessToken:newAccessToken});
+            response.send({ accessToken: newAccessToken });
         } catch (error) {
             response.clearCookie("refreshToken");
             response.status(500).send({ erro: 'Refresh inválido' })
