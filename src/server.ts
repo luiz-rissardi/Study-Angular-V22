@@ -7,33 +7,42 @@ import {
 import express, { NextFunction, Request, Response } from 'express';
 import { join } from 'node:path';
 import cors from "cors";
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHash } from 'node:crypto';
 import cookieParser from "cookie-parser";
 import dotenv from "dotenv";
 import { createRoutes } from './routes.server';
 import jwt, { JsonWebTokenError, TokenExpiredError } from "jsonwebtoken";
+import { redisService } from "./redisService";
 
 // 1. CORREÇÃO: Importando o cliente real do Redis
 import { createClient } from 'redis';
 
 dotenv.config();
 
-// 2. CORREÇÃO: Instanciando o cliente real conectado ao Docker (localhost / 127.0.0.1)
-const clientRedis = createClient({
+export const clientRedis = createClient({
   url: process.env['REDIS_URL'] || 'redis://127.0.0.1:6379'
 });
 
+// Listener de erro global (essencial para o driver não derrubar a aplicação em erros assíncronos)
 clientRedis.on('error', (err) => {
   console.error('Erro na conexão com o Redis do Docker:', err.message);
 });
 
-// Inicializando a conexão obrigatória do Redis v4+
-try {
-  await clientRedis.connect();
-  console.log('Conectado ao Redis no Docker com sucesso!');
-} catch (err) {
-  console.error('Não foi possível conectar ao Docker Redis. Certifique-se de que rodou o container.', err);
+// Função para conectar de forma assíncrona e segura
+async function conectarRedis() {
+  console.log("conectando redis....");
+  if (!clientRedis.isOpen) {
+    try {
+      await clientRedis.connect();
+      console.log('Conectado ao Redis no Docker com sucesso!');
+    } catch (err) {
+      console.error('Não foi possível conectar ao Docker Redis. Certifique-se de que o container está rodando.');
+    }
+  }
 }
+
+// Inicializa a conexão
+conectarRedis();
 
 const browserDistFolder = join(import.meta.dirname, '../browser');
 
@@ -48,9 +57,49 @@ export interface AuthenticatedRequest extends Request {
   userId?: string;
 }
 
+export function concurrencyHook(timeMs: number) {
+  return async (request: AuthenticatedRequest, response: Response, next: NextFunction) => {
+    // Busca o ID real injetado pelo autenticador ou usa um fallback caso a rota seja pública
+    const userId = request.userId;
+
+    const serializedPayload = JSON.stringify(request.body);
+
+    const payloadHash = createHash('sha256')
+      .update(`${userId}:${request.originalUrl}:${serializedPayload}`)
+      .digest('hex');
+
+    const lockKey = `req-lock:${payloadHash}`;
+    let lockToken: string | null = null;
+
+    try {
+      // Tenta adquirir o lock atômico no Redis
+      lockToken = await redisService.acquire(lockKey, timeMs);
+
+      if (!lockToken) {
+        //  RETORNA IMEDIATAMENTE impedindo o next()
+        return response.status(409).send({ message: 'Uma requisição idêntica já está em processamento. Aguarde.' });
+      }
+
+      // Liberação quando terminar com sucesso ou falha
+      response.on('finish', async () => {
+        if (lockToken) await redisService.release(lockKey, lockToken);
+      });
+
+      // Liberação se o cliente cancelar a requisição/conexão cair
+      response.on('close', async () => {
+        if (lockToken) await redisService.release(lockKey, lockToken);
+      });
+
+      return next();
+    } catch (error) {
+      return next(error);
+    }
+  }
+}
 export function authenticateHook(request: AuthenticatedRequest, response: Response, next: NextFunction) {
   try {
     const authHeader = request.headers.authorization;
+
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
       response.status(401).send({
         error: "WITHOUT_TOKEN",
@@ -90,7 +139,7 @@ export function authenticateHook(request: AuthenticatedRequest, response: Respon
 }
 
 export async function idempotencyKeyHook(request: any, response: Response, next: NextFunction) {
-  
+
   if (request.method !== 'POST' && request.method !== 'PATCH') {
     return next();
   }
@@ -113,7 +162,7 @@ export async function idempotencyKeyHook(request: any, response: Response, next:
 
     // Se lockAcquired NÃO for null, significa que a chave já estava no Redis
     if (lockAcquired !== null) {
-      const cachedValue: string = lockAcquired || "";
+      const cachedValue: any = lockAcquired || "";
 
       if (cachedValue === 'PROCESSING') {
         return response.status(409).json({
@@ -125,7 +174,7 @@ export async function idempotencyKeyHook(request: any, response: Response, next:
         const savedResponse = JSON.parse(cachedValue);
         return response.status(savedResponse.status).json(savedResponse.body);
       } catch (err) {
-        // Se falhar no parse por algum motivo, deixa a requisição prosseguir
+        return;
       }
     }
 
@@ -160,7 +209,7 @@ export async function idempotencyKeyHook(request: any, response: Response, next:
 
         // Salva a resposta final no Redis mantendo o TTL (tempo de vida) atual de 1 minuto
         await clientRedis.set(redisKey, JSON.stringify(responseData), {
-          expiration: "KEEPTTL"
+          KEEPTTL: true
         });
       } catch (err) {
         console.error('Erro ao salvar idempotência no Redis:', err);

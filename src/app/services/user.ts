@@ -1,5 +1,5 @@
 import { HttpClient } from '@angular/common/http';
-import { computed, inject, Service, signal } from '@angular/core';
+import { computed, inject, Injectable, signal } from '@angular/core';
 import { UserFormModel } from '../componets/form-card/form-card';
 import { firstValueFrom } from 'rxjs';
 
@@ -8,7 +8,9 @@ export interface LoginCredentials {
     password: string;
 }
 
-@Service()
+@Injectable({
+    providedIn: 'root'
+})
 export class UserService {
 
     private httpClient = inject(HttpClient);

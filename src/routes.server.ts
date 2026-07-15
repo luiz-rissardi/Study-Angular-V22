@@ -1,68 +1,81 @@
 import { Application } from "express";
-import { AuthenticatedRequest, authenticateHook, db, idempotencyKeyHook, UserModel } from "./server";
+import { AuthenticatedRequest, authenticateHook, concurrencyHook, db, idempotencyKeyHook, UserModel } from "./server";
 import jwt from "jsonwebtoken";
 import { PaymentData } from "./app/componets/payment/payment";
 
-const data:any = [];
+const data: any = [];
 
 export function createRoutes(app: Application) {
 
-    app.post("/payment",authenticateHook, idempotencyKeyHook, async (request, response) => {
+    // 1. INITIATE: Agora usa a chave de idempotência vinda do cliente para evitar a criação de múltiplos tokens
+    app.post("/payment/initiate", authenticateHook, concurrencyHook(2000), (request, response) => {
+        const { amount, destination, userId } = request.body;
+
+        // Pegamos a chave que o front gerou para esta intenção de clique
+        const idempotencyKey = request.headers['idempotency-key'];
+
+        const payload = {
+            sub: userId,
+            amount,
+            destination,
+            jti: idempotencyKey // Usamos a chave fixa do cliente em vez de gerar um random aqui!
+        };
+
+        const idempotencyToken = jwt.sign(payload, process.env["JWT_SECRET"]!, { expiresIn: '2m' });
+
+        return response.status(200).json({ idempotencyToken });
+    });
+
+    // 2. CONFIRM: Executa o processo pesado travando concorrência pela chave do token
+    app.post("/payment/confirm", authenticateHook, idempotencyKeyHook, async (request, response) => {
         const paymentData: PaymentData = request.body;
-        await new Promise(resolve => setTimeout(resolve, 5000));
 
-        data.push(paymentData)
+        // Simulação de delay de processamento
+        await new Promise(resolve => setTimeout(resolve, 2000));
+
+        data.push(paymentData);
+
         console.log(data);
+        return response.status(200).send({ success: true, message: "operação feita com sucesso!" });
+    });
 
-        response.send({ success: true, message: "operação feita com sucesso!" })
-
-    })
-
+    // 3. AUTH LOGIN: Removido o response.end() duplicado do finally
     app.post("/auth/login", (request, response) => {
         try {
             const { userName, password } = request.body as UserModel;
             let user: UserModel = {
-                userName: "",
-                email: "",
-                age: null,
-                userType: "",
-                id: "",
-                password: ""
+                userName: "", email: "", age: null, userType: "", id: "", password: ""
             };
 
             db.forEach((el: UserModel) => {
                 if (el.userName == userName && password == el.password) {
                     user = el;
                 }
-            })
+            });
 
             if (user.id === "") {
-                response.status(401).send("Invalid Credentials!");
-                return;
+                return response.status(401).send("Invalid Credentials!");
             }
 
-            const accessToken = jwt.sign({ userId: user.id }, process.env["JWT_SECRET"]!, { expiresIn: '20s' });
+            const accessToken = jwt.sign({ userId: user.id }, process.env["JWT_SECRET"]!, { expiresIn: '15min' });
             const refreshToken = jwt.sign({ userId: user.id }, process.env["REFRESH_SECRET"]!, { expiresIn: '7d' });
 
             response.cookie("refreshToken", refreshToken, {
                 httpOnly: true,
                 signed: true,
-                sameSite: 'strict',  // mitiga CSRF
+                sameSite: 'strict',
                 maxAge: 7 * 24 * 60 * 60 * 1000,
-            })
-            response.send({
-                accessToken,
-                userId: user.id
-            })
+            });
+
+            return response.send({ accessToken, userId: user.id });
 
         } catch (error) {
-            console.log(error);
-            response.status(500).send("Internal server error");
-        } finally {
-            response.end();
+            console.error(error);
+            return response.status(500).send("Internal server error");
         }
-    })
+    });
 
+    // 4. USER UPDATE
     app.put("/user", authenticateHook, (request: AuthenticatedRequest, response) => {
         try {
             const newUserData: UserModel = request.body;
@@ -73,23 +86,20 @@ export function createRoutes(app: Application) {
                 db.set(userId, { ...newUserData });
             }
 
-            response.status(200).send({ ...newUserData });
+            return response.status(200).send({ ...newUserData });
         } catch (error) {
-            response.status(500).send("Internal server error");
-        } finally {
-            response.end();
+            return response.status(500).send("Internal server error");
         }
-    })
+    });
 
+    // 5. AUTH REFRESH
     app.post("/auth/refresh", (request, response) => {
         const refreshToken = request.signedCookies.refreshToken;
         if (!refreshToken) {
-            response.status(500).json({ erro: 'Sem refresh token' });
-            return;
+            return response.status(401).json({ erro: 'Sem refresh token' });
         }
 
         try {
-            // fazer a rotação de refreshToken
             const payload = jwt.verify(refreshToken, process.env["REFRESH_SECRET"]!) as { userId: string };
             const newAccessToken = jwt.sign({ userId: payload.userId }, process.env["JWT_SECRET"]!, { expiresIn: '15m' });
             const newRefreshToken = jwt.sign({ userId: payload.userId }, process.env["REFRESH_SECRET"]!, { expiresIn: '7d' });
@@ -99,22 +109,16 @@ export function createRoutes(app: Application) {
                 signed: true,
                 sameSite: 'strict',
                 maxAge: 7 * 24 * 60 * 60 * 1000,
-                // secure: true // lembre-se de ativar em produção!
             });
-            response.send({ accessToken: newAccessToken });
+            return response.send({ accessToken: newAccessToken });
         } catch (error) {
             response.clearCookie("refreshToken");
-            response.status(500).send({ erro: 'Refresh inválido' })
-        } finally {
-            response.end();
+            return response.status(403).send({ erro: 'Refresh inválido' });
         }
-    })
+    });
 
     app.post('/auth/logout', (req, res) => {
         res.clearCookie('refreshToken');
-        res.sendStatus(204);
+        return res.sendStatus(204);
     });
 }
-
-
-

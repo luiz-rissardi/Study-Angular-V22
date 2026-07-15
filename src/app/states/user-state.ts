@@ -1,7 +1,9 @@
-import { Service, signal, WritableSignal } from '@angular/core';
+import { Injectable, signal, WritableSignal } from '@angular/core';
 import { UserDomain } from '../componets/form-card/form-card';
 
-@Service()
+@Injectable({
+    providedIn: 'root'
+})
 export class UserState {
 
     userState:WritableSignal<UserDomain> = signal({

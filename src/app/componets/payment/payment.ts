@@ -1,7 +1,7 @@
 import { Component, inject, OnInit, signal } from '@angular/core';
 import { form, FormField, min, required, submit } from '@angular/forms/signals';
 import { UserState } from '../../states/user-state';
-import { randomUUID } from 'node:crypto';
+
 import { PaymentService } from '../../services/payment';
 
 export interface PaymentData {
@@ -10,13 +10,28 @@ export interface PaymentData {
   value: number;
 }
 
+export interface InitiatePaymentRequest {
+  amount: number;
+  destination: number;
+}
+
+export interface InitiatePaymentResponse {
+  idempotencyToken: string;
+}
+
+export interface ConfirmPaymentResponse {
+  message: string;
+  transactionId: string;
+  timestamp: string;
+}
+
 @Component({
   selector: 'app-payment',
   imports: [FormField],
   templateUrl: './payment.html',
   styleUrl: './payment.scss',
 })
-export class Payment implements OnInit {
+export class Payment {
 
   private userState = inject(UserState);
   private paymentService = inject(PaymentService);
@@ -25,10 +40,6 @@ export class Payment implements OnInit {
     creditCardNumber: 0,
     value: 0
   });
-
-  ngOnInit(): void {
-    this.paymentService.initTransaction()
-  }
 
   protected paymentForm = form(this.paymentData, (fields) => {
     required(fields.accountId, { message: "campo obrigátorio" });
@@ -41,9 +52,10 @@ export class Payment implements OnInit {
     event.preventDefault();
     submit(this.paymentForm, async () => {
       const payload = this.paymentForm().value();
-      
-      this.paymentService.pay(payload).subscribe({
+
+      this.paymentService.executeSecurePayment({ amount: payload.value, destination: payload.creditCardNumber }).subscribe({
         next: (res) => {
+          console.log(res);
           alert('Pago com sucesso!');
         },
         error: (err) => {

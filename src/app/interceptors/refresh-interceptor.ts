@@ -15,12 +15,13 @@ export const refreshInterceptor: HttpInterceptorFn = (req, next) => {
 
   return next(req).pipe(
     catchError((err: HttpErrorResponse) => {
+      console.log(err);
       // se o erro não for 401 (erros de autorização) passa o erro a diante no navegador
       if (err.status !== 401) return throwError(() => err);
 
       return from(userService.refresh()).pipe(
         switchMap((novoToken) => {
-          console.log("reobtendo um access token ...");
+          console.log("recebendo um access token ...");
           const retried = req.clone({ setHeaders: { Authorization: `Bearer ${novoToken}` } });
           return next(retried); // etapa 5: retry automático
         }),
