@@ -53,14 +53,13 @@ export class Payment {
     submit(this.paymentForm, async () => {
       const payload = this.paymentForm().value();
 
-      this.paymentService.executeSecurePayment({ amount: payload.value, destination: payload.creditCardNumber }).subscribe({
+      this.paymentService.executeSecurePayment(payload).subscribe({
         next: (res) => {
           console.log(res);
           alert('Pago com sucesso!');
         },
         error: (err) => {
-          console.error(err);
-          alert('Erro ao processar. Você pode tentar novamente.');
+          console.log("Erro ao processar. Você pode tentar novamente.");
           // Note que NÃO resetamos a chave aqui! 
         }
       });

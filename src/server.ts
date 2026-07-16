@@ -59,9 +59,7 @@ export interface AuthenticatedRequest extends Request {
 
 export function concurrencyHook(timeMs: number) {
   return async (request: AuthenticatedRequest, response: Response, next: NextFunction) => {
-    // Busca o ID real injetado pelo autenticador ou usa um fallback caso a rota seja pública
-    const userId = request.userId;
-
+    const userId = request.userId || "anonimo";
     const serializedPayload = JSON.stringify(request.body);
 
     const payloadHash = createHash('sha256')
@@ -69,26 +67,16 @@ export function concurrencyHook(timeMs: number) {
       .digest('hex');
 
     const lockKey = `req-lock:${payloadHash}`;
-    let lockToken: string | null = null;
-
+    
     try {
-      // Tenta adquirir o lock atômico no Redis
-      lockToken = await redisService.acquire(lockKey, timeMs);
+      // Adquire o lock pelo tempo definido (ex: 10000ms)
+      const lockToken = await redisService.acquire(lockKey, timeMs);
 
       if (!lockToken) {
-        //  RETORNA IMEDIATAMENTE impedindo o next()
-        return response.status(409).send({ message: 'Uma requisição idêntica já está em processamento. Aguarde.' });
+        return response.status(409).send({ 
+          message: 'Uma requisição idêntica já está em processamento ou foi realizada recentemente. Aguarde.' 
+        });
       }
-
-      // Liberação quando terminar com sucesso ou falha
-      response.on('finish', async () => {
-        if (lockToken) await redisService.release(lockKey, lockToken);
-      });
-
-      // Liberação se o cliente cancelar a requisição/conexão cair
-      response.on('close', async () => {
-        if (lockToken) await redisService.release(lockKey, lockToken);
-      });
 
       return next();
     } catch (error) {
@@ -96,6 +84,7 @@ export function concurrencyHook(timeMs: number) {
     }
   }
 }
+
 export function authenticateHook(request: AuthenticatedRequest, response: Response, next: NextFunction) {
   try {
     const authHeader = request.headers.authorization;
@@ -150,10 +139,12 @@ export async function idempotencyKeyHook(request: any, response: Response, next:
   }
 
   const redisKey = `idempotency:${key}`;
+
   try {
+    // verifica se o key = idempotencykey foi realmente gerado e assinado pelo mesmo servidor, caso não estoura um erro
+    jwt.verify(key, process.env["JWT_SECRET"]!);
+
     // 3. CORREÇÃO: Tenta obter o lock atômico de 1 minuto (60 segundos)
-    // NX: true garante que o lock só é criado se a chave NÃO existir.
-    // GET: true garante que, se ela já existir, recebemos o valor atual (ex: 'PROCESSING' ou o JSON de resposta).
     const lockAcquired = await clientRedis.set(redisKey, 'PROCESSING', {
       NX: true,
       GET: true,

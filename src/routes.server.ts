@@ -8,17 +8,13 @@ const data: any = [];
 export function createRoutes(app: Application) {
 
     // 1. INITIATE: Agora usa a chave de idempotência vinda do cliente para evitar a criação de múltiplos tokens
-    app.post("/payment/initiate", authenticateHook, concurrencyHook(2000), (request, response) => {
+    app.post("/payment/initiate", authenticateHook, concurrencyHook(5000), (request, response) => {
         const { amount, destination, userId } = request.body;
-
-        // Pegamos a chave que o front gerou para esta intenção de clique
-        const idempotencyKey = request.headers['idempotency-key'];
 
         const payload = {
             sub: userId,
             amount,
             destination,
-            jti: idempotencyKey // Usamos a chave fixa do cliente em vez de gerar um random aqui!
         };
 
         const idempotencyToken = jwt.sign(payload, process.env["JWT_SECRET"]!, { expiresIn: '2m' });
@@ -31,7 +27,7 @@ export function createRoutes(app: Application) {
         const paymentData: PaymentData = request.body;
 
         // Simulação de delay de processamento
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        await new Promise(resolve => setTimeout(resolve, 5000));
 
         data.push(paymentData);
 

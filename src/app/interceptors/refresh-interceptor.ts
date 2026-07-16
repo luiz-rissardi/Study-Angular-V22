@@ -15,7 +15,6 @@ export const refreshInterceptor: HttpInterceptorFn = (req, next) => {
 
   return next(req).pipe(
     catchError((err: HttpErrorResponse) => {
-      console.log(err);
       // se o erro não for 401 (erros de autorização) passa o erro a diante no navegador
       if (err.status !== 401) return throwError(() => err);
 

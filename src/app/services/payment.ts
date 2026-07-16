@@ -13,31 +13,18 @@ export class PaymentService {
     private userState = inject(UserState)
 
 
-    public executeSecurePayment(payload: InitiatePaymentRequest) {
+    public executeSecurePayment(payload: PaymentData) {
         return this.http.post<InitiatePaymentResponse>(`payment/initiate`, { ...payload, userId: this.userState.userState().id })
             .pipe(
                 concatMap((initiateRes) => {
                     return this.http.post<ConfirmPaymentResponse>(
                         `payment/confirm`,
-                        {},
+                        payload,
                         {
                             context: new HttpContext().set(IDEMPOTENCY_KEY, initiateRes.idempotencyToken)
                         }
                     );
-                }),
-                catchError(this.handleHttpError)
+                })
             );
-    }
-
-    private handleHttpError(error: HttpErrorResponse): Observable<never> {
-        let errorMessage = 'Ocorreu um erro inesperado no processamento do pagamento.';
-
-        if (error.error && error.error.message) {
-            errorMessage = error.error.message;
-        } else if (error.status === 0) {
-            errorMessage = 'Não foi possível conectar ao servidor de pagamentos. Verifique sua conexão.';
-        }
-
-        return throwError(() => new Error(errorMessage));
     }
 }
