@@ -14,7 +14,8 @@ export class PaymentService {
 
 
     public executeSecurePayment(payload: PaymentData) {
-        return this.http.post<InitiatePaymentResponse>(`payment/initiate`, { ...payload, userId: this.userState.userState().id })
+        const userId = this.userState.userState()["userId"];
+        return this.http.post<InitiatePaymentResponse>(`payment/initiate`, { ...payload, userId})
             .pipe(
                 concatMap((initiateRes) => {
                     return this.http.post<ConfirmPaymentResponse>(

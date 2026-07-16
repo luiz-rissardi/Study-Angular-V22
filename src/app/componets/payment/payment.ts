@@ -59,6 +59,7 @@ export class Payment {
           alert('Pago com sucesso!');
         },
         error: (err) => {
+          console.log(err);
           console.log("Erro ao processar. Você pode tentar novamente.");
           // Note que NÃO resetamos a chave aqui! 
         }

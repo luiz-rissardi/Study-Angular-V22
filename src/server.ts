@@ -67,22 +67,17 @@ export function concurrencyHook(timeMs: number) {
       .digest('hex');
 
     const lockKey = `req-lock:${payloadHash}`;
-    
-    try {
-      // Adquire o lock pelo tempo definido (ex: 10000ms)
-      const lockToken = await redisService.acquire(lockKey, timeMs);
 
-      if (!lockToken) {
-        return response.status(409).send({ 
-          message: 'Uma requisição idêntica já está em processamento ou foi realizada recentemente. Aguarde.' 
-        });
-      }
+    const lockToken = await redisService.acquire(lockKey, timeMs);
 
-      return next();
-    } catch (error) {
-      return next(error);
+    if (!lockToken) {
+      return response.status(409).send({
+        message: 'Requisição idêntica já está em processamento.'
+      });
     }
-  }
+
+    return next();
+  };
 }
 
 export function authenticateHook(request: AuthenticatedRequest, response: Response, next: NextFunction) {
@@ -127,105 +122,83 @@ export function authenticateHook(request: AuthenticatedRequest, response: Respon
   }
 }
 
-export async function idempotencyKeyHook(request: any, response: Response, next: NextFunction) {
+export async function idempotencyKeyHook(request: AuthenticatedRequest, response: Response, next: NextFunction) {
+  if (request.method !== 'POST' && request.method !== 'PATCH') return next();
 
-  if (request.method !== 'POST' && request.method !== 'PATCH') {
-    return next();
+  const key = request.headers['idempotency-key'] as string;
+  if (!key) return response.status(400).json({ error: 'Idempotency-Key header is missing.' });
+  
+  let tokenPayload: any;
+  try {
+    tokenPayload = jwt.verify(key, process.env["JWT_SECRET"]!);
+  } catch {
+    // token inválido ou expirado — não toca no Redis
+    return response.status(401).json({ error: 'Idempotency key inválida ou expirada.' });
   }
-  const key = request.headers['idempotency-key'];
+  
+  // Valida que o token pertence ao usuário autenticado
+  if (tokenPayload.sub !== request.userId) {
+    return response.status(403).json({ error: 'Idempotency key não pertence ao usuário autenticado.' });
+  }
 
-  if (!key) {
-    return response.status(400).json({ error: 'Idempotency-Key header is missing.' });
+  // Valida que o payload do body bate com o que foi assinado
+  const body = request.body;
+  if (
+    Number(body.value) !== Number(tokenPayload.amount) ||
+    Number(body.accountId) !== Number(tokenPayload.destination)
+  ) {
+    return response.status(422).json({ error: 'Payload não corresponde ao token de idempotência.' });
   }
 
   const redisKey = `idempotency:${key}`;
 
-  try {
-    // verifica se o key = idempotencykey foi realmente gerado e assinado pelo mesmo servidor, caso não estoura um erro
-    jwt.verify(key, process.env["JWT_SECRET"]!);
+  const lockAcquired = await clientRedis.set(redisKey, 'PROCESSING', {
+    NX: true,
+    GET: true,
+    EX: 60
+  });
 
-    // 3. CORREÇÃO: Tenta obter o lock atômico de 1 minuto (60 segundos)
-    const lockAcquired = await clientRedis.set(redisKey, 'PROCESSING', {
-      NX: true,
-      GET: true,
-      EX: 60 // 1 minuto de expiração
-    });
-
-    // Se lockAcquired NÃO for null, significa que a chave já estava no Redis
-    if (lockAcquired !== null) {
-      const cachedValue: any = lockAcquired || "";
-
-      if (cachedValue === 'PROCESSING') {
-        return response.status(409).json({
-          error: 'Another identical request is already being processed.'
-        });
-      }
-
-      try {
-        const savedResponse = JSON.parse(cachedValue);
-        return response.status(savedResponse.status).json(savedResponse.body);
-      } catch (err) {
-        return;
-      }
+  if (lockAcquired !== null) {
+    if (lockAcquired === 'PROCESSING') {
+      return response.status(409).json({ error: 'Requisição já está sendo processada.' });
     }
-
-    let responseBody: any;
-    const originalSend = response.send;
-
-    response.send = function (body) {
-      responseBody = body;
-      return originalSend.call(this, body);
-    };
-
-    response.on('finish', async () => {
-      try {
-        let finalBody = responseBody;
-
-        if (typeof responseBody === 'string') {
-          try {
-            finalBody = JSON.parse(responseBody);
-          } catch {
-            // Se não for JSON válido, mantém original
-          }
-        } else if (Buffer.isBuffer(responseBody)) {
-          try {
-            finalBody = JSON.parse(responseBody.toString('utf8'));
-          } catch { }
-        }
-
-        const responseData = {
-          status: response.statusCode,
-          body: finalBody
-        };
-
-        // Salva a resposta final no Redis mantendo o TTL (tempo de vida) atual de 1 minuto
-        await clientRedis.set(redisKey, JSON.stringify(responseData), {
-          KEEPTTL: true
-        });
-      } catch (err) {
-        console.error('Erro ao salvar idempotência no Redis:', err);
-      }
-    });
-
-    response.on('close', async () => {
-      if (!response.writableEnded) {
-        try {
-          await clientRedis.del(redisKey);
-        } catch (err) {
-          console.error('Erro ao limpar chave no evento close do Redis:', err);
-        }
-      }
-    });
-
-    next();
-  } catch (error) {
     try {
-      await clientRedis.del(redisKey);
+      const saved = JSON.parse(lockAcquired);
+      return response.status(saved.status).json(saved.body);
     } catch {
-      // Ignora erro de exclusão se o Redis estiver inacessível
+      return response.status(500).json({ error: 'Erro ao recuperar resposta cacheada.' });
     }
-    return response.status(500).json({ error: 'Internal idempotency failure.' });
   }
+
+  // intercepta response pra cachear
+  let responseBody: any;
+  const originalSend = response.send.bind(response);
+  response.send = function (body) {
+    responseBody = body;
+    return originalSend(body);
+  };
+
+  response.on('finish', async () => {
+    try {
+      let finalBody = responseBody;
+      if (typeof responseBody === 'string') {
+        try { finalBody = JSON.parse(responseBody); } catch { }
+      } else if (Buffer.isBuffer(responseBody)) {
+        try { finalBody = JSON.parse(responseBody.toString('utf8')); } catch { }
+      }
+      await clientRedis.set(redisKey, JSON.stringify({ status: response.statusCode, body: finalBody }), { KEEPTTL: true });
+    } catch (err) {
+      console.error('Erro ao salvar idempotência no Redis:', err);
+    }
+  });
+
+  response.on('close', async () => {
+    if (!response.writableEnded) {
+      await clientRedis.del(redisKey).catch(() => {});
+    }
+  });
+
+  next();
 }
 
 const angularApp = new AngularNodeAppEngine({

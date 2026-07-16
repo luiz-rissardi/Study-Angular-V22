@@ -9,15 +9,13 @@ export function createRoutes(app: Application) {
 
     // 1. INITIATE: Agora usa a chave de idempotência vinda do cliente para evitar a criação de múltiplos tokens
     app.post("/payment/initiate", authenticateHook, concurrencyHook(5000), (request, response) => {
-        const { amount, destination, userId } = request.body;
+        const { value, accountId, userId } = request.body;
 
-        const payload = {
-            sub: userId,
-            amount,
-            destination,
-        };
-
-        const idempotencyToken = jwt.sign(payload, process.env["JWT_SECRET"]!, { expiresIn: '2m' });
+        const idempotencyToken = jwt.sign(
+            { sub: userId, amount: value, destination: accountId },
+            process.env["JWT_SECRET"]!,
+            { expiresIn: '2m' }
+        );
 
         return response.status(200).json({ idempotencyToken });
     });

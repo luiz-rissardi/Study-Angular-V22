@@ -6,7 +6,7 @@ import { UserDomain } from '../componets/form-card/form-card';
 })
 export class UserState {
 
-    userState:WritableSignal<UserDomain> = signal({
+    userState:WritableSignal<any> = signal({
         id:"",
         userName:"",
         userType:"",
